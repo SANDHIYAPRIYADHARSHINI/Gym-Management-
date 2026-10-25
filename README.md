@@ -1,6 +1,6 @@
 # GymGraph
 
-**Gym Management on a Graph Database** — BACSE202 Database Systems (DA2).
+**Gym Management on a Graph Database** — BACSE202 Database Systems (DA3).
 
 React + TypeScript (Vite), Express + TypeScript, Zod, Neo4j official driver, Argon2id, JWT cookies, Recharts and Lucide. Neo4j is the only database. All sample records are synthetic.
 
