@@ -25,3 +25,20 @@
 ## Before academic demonstration
 
 Run the isolated integration suite on an accessible Neo4j instance, complete the viva checklist and capture screenshots of actual successful workflows. Treat this handoff as source requiring database acceptance verification.
+
+
+## Netlify preparation
+
+- Added Netlify frontend publishing, API function routing and React Router fallback.
+- Added the serverless-http adapter without starting the Express listener inside a function.
+- Production build passed after these changes; nine boundary/adapter tests passed, with eight database integration tests still skipped in the default run.
+- Netlify account authorization and hosted Neo4j setup are required before a functional deployment can be verified.
+
+
+## Portal redesign verification — supersedes the earlier portal blocker
+
+- The application database became reachable in the current environment. Both seeded member and trainer logins returned HTTP 200, and both `/api/portal` calls returned HTTP 200 after the aggregation fix. Meena's balance was verified as 3000.
+- The additive expansion ran successfully: 24 synthetic members, 24 payments, 3 trainers and 10 classes were added to the baseline database without clearing existing data.
+- Browser verification on localhost: member login, overview, membership/payment category, trainer login, branch-member category and directory search for Aditi all worked. Screenshots are saved under docs/screenshots/.
+- TypeScript and production build passed; 21 automated tests passed. The separate eight-test acceptance suite remains skipped in the default run and is not claimed to have passed.
+- These checks verify the local application, not the previously shared Netlify deployment. The deployed site needs the updated build and its own configured database.
