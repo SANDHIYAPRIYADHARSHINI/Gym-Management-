@@ -99,3 +99,40 @@ Six business labels plus authentication-only AppUser are used. IDs are strings (
 See [model and MySQL comparison](docs/MODEL.md), [viva checklist](docs/DEMO.md) and [verification and limits](docs/VERIFICATION.md).
 
 Official API references: [Neo4j transactions](https://neo4j.com/docs/javascript-manual/current/transactions/) and [Vite setup](https://vite.dev/guide/). Resolved package versions are locked in package-lock.json. No performance advantage or production readiness is claimed.
+
+
+## Netlify deployment
+
+The repository includes `netlify.toml` and `netlify/functions/api.ts`: Vite assets are served from `dist`, `/api/*` is routed to the Express function, and other URLs fall back to the React router. The function imports the API without starting a long-running listener. Netlify builds the native Argon2 dependency on its Linux build environment.
+
+1. Create a Neo4j AuraDB instance (or another externally reachable Neo4j server). Store credentials securely; do not paste them into chat or commit them.
+2. In Netlify, configure function runtime environment variables: `NEO4J_URI` (Aura's `neo4j+s://` URI), `NEO4J_USER`, `NEO4J_PASSWORD`, `NEO4J_DATABASE=neo4j`, a random `JWT_SECRET` of at least 32 characters, `NODE_ENV=production`, and `APP_ORIGIN=https://YOUR-SITE.netlify.app` (exact published origin).
+3. Against that new empty database, run `npm run db:constraints` and then `npm run db:seed` locally with the Aura credentials in your ignored `.env`. The seed refuses to overwrite existing data. Use synthetic data only.
+4. Run `npx netlify login`, then `npx netlify deploy --build --prod`. Select/create the intended site during the CLI flow. GitHub access is not required for a manual local upload.
+5. Verify `/api/health`, all three role logins and the demo checklist on the published origin. Changing the domain requires updating `APP_ORIGIN` and redeploying.
+
+A frontend deployment without a reachable Neo4j database and these runtime secrets cannot provide working login or persistence. Serverless login throttling is per warm function instance; a public production service needs a shared rate-limit store or platform enforcement. No successful Netlify deployment is claimed until a deployment URL and runtime checks are verified.
+
+
+### Troubleshooting: Request origin rejected
+
+In local development, `localhost`, `127.0.0.1` and IPv6 loopback are accepted interchangeably on the configured protocol and port. Restart `npm run dev` after updating the server. In production, set `APP_ORIGIN` to the exact URL in your browser (scheme and hostname, no trailing slash), then redeploy. A Netlify deploy-preview URL differs from the main site URL and needs its own exact origin configuration. Never disable origin protection to work around this error.
+
+Demo credentials work only after the API can reach Neo4j and `npm run db:constraints` followed by `npm run db:seed` has populated an empty database. The seed refuses existing records; do not clear a populated database just to fix login.
+
+
+## Personal portals and expanded demo data
+
+Members and trainers now choose what to display from a category list. Members have Overview, My profile, Classes & schedule, and Membership & payments. Trainers have Overview, My profile, Classes & schedule, and a searchable Branch members directory. Cards display individual readable fields; raw database maps are no longer used as portal content. Selected categories are reflected in the URL for bookmarking.
+
+The member query groups payments in a separate WITH clause before returning profile fields, avoiding Neo4j implicit-grouping errors. Refresh the browser after updating; restart the API if it is not running in watch mode.
+
+For a richer **synthetic** demonstration after the baseline seed:
+
+```sh
+npm run db:expand
+```
+
+This additive managed transaction uses reserved `demo-` IDs and MERGE, preserves baseline records, and can be rerun without duplicating generated nodes. It adds 24 members, 24 payments, 3 trainers and 10 classes with varied join dates, full/partial/missing payments and multi-day schedules. It requires the baseline branches/plans/trainers. Baseline course totals apply before expansion; reports change after expansion. No additional login accounts or business labels are added.
+
+Verified portal screenshots: [Member overview](docs/screenshots/member-overview.png) and [Trainer directory](docs/screenshots/trainer-directory.png).
