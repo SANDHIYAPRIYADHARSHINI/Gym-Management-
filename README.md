@@ -136,3 +136,8 @@ npm run db:expand
 This additive managed transaction uses reserved `demo-` IDs and MERGE, preserves baseline records, and can be rerun without duplicating generated nodes. It adds 24 members, 24 payments, 3 trainers and 10 classes with varied join dates, full/partial/missing payments and multi-day schedules. It requires the baseline branches/plans/trainers. Baseline course totals apply before expansion; reports change after expansion. No additional login accounts or business labels are added.
 
 Verified portal screenshots: [Member overview](docs/screenshots/member-overview.png) and [Trainer directory](docs/screenshots/trainer-directory.png).
+
+
+## Behind the scenes
+
+The sidebar groups Graph explorer, Query studio, My insights and Settings for all three roles. Admins retain the full graph and nine-query catalogue. Members and trainers use API-scoped graph and read-only query endpoints; trainer graphs omit member phone numbers and payments. Settings saves the theme in this browser and exposes committed-write demonstrations only to admins.
