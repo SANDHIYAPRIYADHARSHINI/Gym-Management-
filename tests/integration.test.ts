@@ -1,0 +1,26 @@
+import 'dotenv/config';
+import {describe,it,expect,beforeAll,afterAll} from 'vitest';
+import request from 'supertest';
+const enabled=process.env.RUN_NEO4J_TESTS==='true';
+// Only the separately configured disposable Neo4j instance may be cleared.
+describe.skipIf(!enabled)('real isolated Neo4j acceptance',()=>{
+ let app:any,driver:any,transaction:any,agent:any;
+ const origin='http://localhost:5173';
+ beforeAll(async()=>{
+ const uri=process.env.TEST_NEO4J_URI;if(!uri||uri===(process.env.NEO4J_URI||'bolt://127.0.0.1:7687'))throw Error('TEST_NEO4J_URI must identify a separate disposable instance');
+ process.env.NEO4J_URI=uri;process.env.NEO4J_PASSWORD=process.env.TEST_NEO4J_PASSWORD;process.env.NEO4J_DATABASE='neo4j';process.env.JWT_SECRET='isolated-integration-test-secret-32-characters';process.env.APP_ORIGIN=origin;
+ const db=await import('../server/db.js');driver=db.driver;transaction=db.transaction;await driver.verifyConnectivity();
+ const session=driver.session();try{const result=await session.run('MATCH (n) RETURN count(n) AS count');if(result.records[0].get('count')!==0)throw Error('Test instance must start empty; refusing to clear existing data');}finally{await session.close();}
+ await (await import('../server/setup.js')).constraints();await (await import('../server/seed.js')).seed();app=(await import('../server/app.js')).app;agent=request.agent(app);
+ expect((await agent.post('/api/login').set('Origin',origin).send({email:'admin@gymgraph.example',password:'GymGraph-Demo-2026!'})).status).toBe(200);
+ },60000);
+ afterAll(async()=>{if(driver)await driver.close();});
+ it('matches dashboard and pending dues',async()=>{const r=await agent.get('/api/dashboard');expect(r.status).toBe(200);expect(r.body.data.branches.reduce((s:number,b:any)=>s+b.members,0)).toBe(5);expect(r.body.data.branches.reduce((s:number,b:any)=>s+b.revenue,0)).toBe(46000);expect(r.body.data.dues).toEqual([{memberId:'4',name:'Meena',balance:3000}]);});
+ it('runs the nine fixed evaluation queries',async()=>{for(let i=1;i<=9;i++){const r=await agent.get('/api/evaluation/'+i);expect(r.status).toBe(200);expect(Array.isArray(r.body.data)).toBe(true);}const multiple=await agent.get('/api/evaluation/3');expect(multiple.body.data).toEqual([{name:'Ravi',payments:2}]);expect((await agent.get('/api/evaluation/4')).body.data).toEqual([]);});
+ it('rolls back registration with a missing branch',async()=>{const r=await agent.post('/api/register').set('Origin',origin).send({memberId:'rollback-test',name:'Rollback',phone:'9200000000',joinDate:'2026-01-03',branchId:'missing',planId:'1'});expect(r.status).toBe(404);const result=await transaction(false,(run:any)=>run('MATCH (m:Member {memberId:$id}) RETURN count(m) AS count',{id:'rollback-test'}));expect(result.data[0].count).toBe(0);});
+ it('registers with edges and initial payment atomically',async()=>{const r=await agent.post('/api/register').set('Origin',origin).send({memberId:'test-member',name:'Test Member',phone:'9200000000',joinDate:'2026-01-03',branchId:'1',planId:'1'});expect(r.status).toBe(201);expect(r.body.statements.some((s:any)=>JSON.stringify(s).includes('9200000000'))).toBe(false);const result=await transaction(false,(run:any)=>run('MATCH (m:Member {memberId:$id})-[:HOME_BRANCH]->(:Branch),(m)-[:SUBSCRIBED_TO]->(:MembershipPlan),(m)-[:MADE]->(p:Payment) RETURN count(p) AS count,sum(p.amount) AS paid',{id:'test-member'}));expect(result.data[0]).toEqual({count:1,paid:3000});});
+ it('rejects invalid phones and nonpositive payments',async()=>{expect((await agent.post('/api/records/payments').set('Origin',origin).send({memberId:'1',amount:0,paymentDate:'2026-01-03'})).status).toBe(400);expect((await agent.post('/api/records/members').set('Origin',origin).send({name:'Invalid',phone:'123',joinDate:'2026-01-03',branchId:'1',planId:'1'})).status).toBe(400);});
+ it('records plan history and guards deletion',async()=>{expect((await agent.post('/api/members/test-member/plan').set('Origin',origin).send({planId:'2'})).status).toBe(200);const history=await agent.get('/api/members/test-member/history');expect(history.body.data[0].plan).toBe('Basic');expect((await agent.delete('/api/records/members/test-member').set('Origin',origin)).status).toBe(409);});
+ it('enforces member ownership and trainer permissions',async()=>{for(const role of ['member','trainer']){const a=request.agent(app);expect((await a.post('/api/login').set('Origin',origin).send({email:role+'@gymgraph.example',password:'GymGraph-Demo-2026!'})).status).toBe(200);expect((await a.get('/api/records/members')).status).toBe(403);expect((await a.get('/api/graph')).status).toBe(403);const portal=await a.get('/api/portal');expect(portal.status).toBe(200);expect(JSON.stringify(portal.body)).not.toContain('passwordHash');if(role==='member')expect(portal.body.data.profile.member.name).toBe('Meena');else expect(portal.body.data.members.map((m:any)=>m.name).sort()).toEqual(['Arjun','Ravi','Test Member'].sort());}});
+ it('never exposes auth nodes through graph',async()=>{const r=await agent.get('/api/graph');expect(r.status).toBe(200);expect(r.body.data.nodes.every((n:any)=>n.label!=='AppUser')).toBe(true);expect(JSON.stringify(r.body)).not.toContain('passwordHash');});
+});

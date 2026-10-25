@@ -1,0 +1,16 @@
+export const memberDetails=`MATCH (m:Member)-[:HOME_BRANCH]->(b:Branch), (m)-[:SUBSCRIBED_TO]->(pl:MembershipPlan) OPTIONAL MATCH (m)-[:MADE]->(p:Payment) RETURN m{.*} AS member,b.location AS branch,pl.planName AS plan,pl.fee AS fee,coalesce(sum(p.amount),0) AS totalPaid, CASE WHEN pl.fee-coalesce(sum(p.amount),0)>0 THEN pl.fee-coalesce(sum(p.amount),0) ELSE 0 END AS balance ORDER BY m.memberId`;
+export const branchReport=`MATCH (b:Branch) OPTIONAL MATCH (b)<-[:HOME_BRANCH]-(m:Member) OPTIONAL MATCH (m)-[:MADE]->(p:Payment) RETURN b.branchId AS branchId,b.location AS branch,count(DISTINCT m) AS members,coalesce(sum(p.amount),0) AS revenue ORDER BY branchId`;
+export const planRevenue=`MATCH (pl:MembershipPlan) OPTIONAL MATCH (pl)<-[:SUBSCRIBED_TO]-(m:Member) OPTIONAL MATCH (m)-[:MADE]->(p:Payment) RETURN pl.planName AS plan,coalesce(sum(p.amount),0) AS revenue`;
+export const timetable=`MATCH (c:ClassSession)-[:TAUGHT_BY]->(t:Trainer), (c)-[:HELD_AT]->(b:Branch) RETURN c{.*} AS class,t.name AS trainer,b.location AS branch ORDER BY c.classId`;
+export const dues=`MATCH (m:Member)-[:SUBSCRIBED_TO]->(pl:MembershipPlan) OPTIONAL MATCH (m)-[:MADE]->(p:Payment) WITH m,pl,coalesce(sum(p.amount),0) AS paid WHERE pl.fee>paid RETURN m.memberId AS memberId,m.name AS name,pl.fee-paid AS balance ORDER BY memberId`;
+export const catalogue=[
+ {title:'Members, branches & plans',explanation:'Traverse each member’s home branch and subscription.',query:memberDetails},
+ {title:'Revenue per membership plan',explanation:'Payments are attributed to the member’s current plan.',query:planRevenue},
+ {title:'Members with multiple payments',explanation:'Group payments and filter counts greater than one.',query:`MATCH (m:Member)-[:MADE]->(p:Payment) WITH m,count(p) AS payments WHERE payments>1 RETURN m.name AS name,payments`},
+ {title:'Members who never paid',explanation:'Find members without a MADE relationship.',query:`MATCH (m:Member) WHERE NOT (m)-[:MADE]->(:Payment) RETURN m{.*} AS member`},
+ {title:'Highest-paying member',explanation:'Order lifetime payment sums, with stable ID tie-breaking.',query:`MATCH (m:Member)-[:MADE]->(p:Payment) RETURN m.name AS name,sum(p.amount) AS total ORDER BY total DESC,m.memberId LIMIT 1`},
+ {title:'Trainers and classes',explanation:'Optional matching retains trainers without classes.',query:`MATCH (t:Trainer) OPTIONAL MATCH (c:ClassSession)-[:TAUGHT_BY]->(t) RETURN t.name AS trainer,collect(c.className) AS classes ORDER BY trainer`},
+ {title:'Largest branch',explanation:'Count distinct home members, including empty branches.',query:`MATCH (b:Branch) OPTIONAL MATCH (m:Member)-[:HOME_BRANCH]->(b) RETURN b.location AS branch,count(m) AS members ORDER BY members DESC,b.branchId LIMIT 1`},
+ {title:'Payments in a date range',explanation:'Inclusive bounds applied to Neo4j dates.',query:`MATCH (p:Payment) WHERE p.paymentDate>=date($from) AND p.paymentDate<=date($to) RETURN p{.*} AS payment ORDER BY p.paymentDate`},
+ {title:'Classes at trainer’s home branch',explanation:'Require the class branch and trainer workplace to be the same node.',query:`MATCH (c:ClassSession)-[:TAUGHT_BY]->(t:Trainer)-[:WORKS_AT]->(b:Branch)<-[:HELD_AT]-(c) RETURN c.className AS class,t.name AS trainer,b.location AS branch`}
+];
